@@ -25,19 +25,128 @@ const screens = { start:$('screen-start'), quiz:$('screen-quiz'), result:$('scre
 function show(name){ Object.values(screens).forEach(s=>s.classList.remove('active')); screens[name].classList.add('active'); }
 function typeset(el){ if(window.MathJax&&MathJax.typesetPromise) MathJax.typesetPromise(el?[el]:undefined).catch(()=>{}); }
 
-/* ===== LaTeX → 数値 ===== */
-function latexToNumber(latex){
-  if(latex==null) return NaN;
-  let s = String(latex).replace(/\s+/g,'');
-  s = s.replace(/\\left|\\right|\\,|\\!|\\;|\\cdot|\\mleft|\\mright/g,'');
-  s = s.replace(/[−ー–—]/g,'-').replace(/[＋]/g,'+');
-  let m = s.match(/^(-?)\\d?frac\{(-?\d+)\}\{(-?\d+)\}$/);
-  if(m){ const sign=m[1]==='-'?-1:1; return sign*(parseFloat(m[2])/parseFloat(m[3])); }
-  m = s.match(/^(-?\d+)\/(-?\d+)$/);
-  if(m){ return parseFloat(m[1])/parseFloat(m[2]); }
-  if(/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
-  return NaN;
+/* ===== 座標平面の描画（oniripi-1ji-graph 方式を流用） ===== */
+const CANVAS_PX = 480;            // 内部描画解像度（CSSで vh スケール）
+const LINE_COLORS = ['#2f7ff0', '#e8590c']; // 直線① / 直線②
+let gcanvas=null, gctx=null, gRange=6;
+function gUnit(){ return CANVAS_PX / (gRange*2); }
+function g2c(gx,gy){ const u=gUnit(); return { x:CANVAS_PX/2 + gx*u, y:CANVAS_PX/2 - gy*u }; }
+
+function setupCanvas(){
+  gcanvas=$('graph-canvas'); if(!gcanvas) return;
+  gctx=gcanvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  gcanvas.width=CANVAS_PX*dpr; gcanvas.height=CANVAS_PX*dpr;
+  gctx.setTransform(dpr,0,0,dpr,0,0); // HiDPI（くっきり）
 }
+function drawGrid(){
+  const R=gRange, O=CANVAS_PX/2;
+  gctx.fillStyle='#fbfcff'; gctx.fillRect(0,0,CANVAS_PX,CANVAS_PX);
+  // グリッド線
+  for(let g=-R; g<=R; g++){
+    if(g===0) continue;
+    const lx=g2c(g,0).x, ly=g2c(0,g).y;
+    const major=Math.abs(g)===R-1;
+    gctx.strokeStyle=major?'#cdd6ee':'#e9eefb'; gctx.lineWidth=1;
+    gctx.beginPath(); gctx.moveTo(lx,0); gctx.lineTo(lx,CANVAS_PX); gctx.stroke();
+    gctx.beginPath(); gctx.moveTo(0,ly); gctx.lineTo(CANVAS_PX,ly); gctx.stroke();
+  }
+  // 軸
+  gctx.strokeStyle='#4a5365'; gctx.lineWidth=2; gctx.lineCap='round';
+  gctx.beginPath(); gctx.moveTo(0,O); gctx.lineTo(CANVAS_PX-4,O); gctx.stroke();
+  gctx.beginPath(); gctx.moveTo(O,CANVAS_PX); gctx.lineTo(O,4); gctx.stroke();
+  gctx.fillStyle='#4a5365';
+  gctx.beginPath(); gctx.moveTo(CANVAS_PX-4,O); gctx.lineTo(CANVAS_PX-13,O-5); gctx.lineTo(CANVAS_PX-13,O+5); gctx.fill();
+  gctx.beginPath(); gctx.moveTo(O,4); gctx.lineTo(O-5,13); gctx.lineTo(O+5,13); gctx.fill();
+  // 軸ラベル
+  gctx.font='italic 700 14px Outfit, sans-serif'; gctx.fillStyle='#3a4252';
+  gctx.textAlign='left'; gctx.fillText('x',CANVAS_PX-11,O-7);
+  gctx.textAlign='center'; gctx.fillText('y',O+12,15);
+  // 目盛り数字（範囲が広いLv3は奇数を間引いて見やすく）
+  const step = R>=8 ? 2 : 1;
+  gctx.font='600 11px Outfit, sans-serif'; gctx.fillStyle='#7a8398';
+  for(let g=-(R-1); g<=R-1; g++){
+    if(g===0||g%step!==0) continue;
+    const cx=g2c(g,0).x, cy=g2c(0,g).y;
+    gctx.textAlign='center'; gctx.fillText(g,cx,O+16);
+    gctx.textAlign='right'; gctx.fillText(g,O-6,cy+4);
+  }
+  gctx.textAlign='right'; gctx.fillText('O',O-6,O+16);
+}
+// 直線 y = (a.n/a.d)x + b を範囲端まで描く（端の格子点ラベル①②を付ける）
+function drawGraphLine(a,b,color,label){
+  const R=gRange, slope=a.n/a.d;
+  const pts=[];
+  const yL=slope*(-R)+b, yR=slope*R+b;
+  if(yL>=-R&&yL<=R) pts.push({x:-R,y:yL});
+  if(yR>=-R&&yR<=R) pts.push({x:R,y:yR});
+  if(Math.abs(slope)>1e-9){
+    const xT=(R-b)/slope, xB=(-R-b)/slope;
+    if(xT>-R&&xT<R) pts.push({x:xT,y:R});
+    if(xB>-R&&xB<R) pts.push({x:xB,y:-R});
+  }
+  if(pts.length<2) return;
+  const p=pts.slice(0,2);
+  const c1=g2c(p[0].x,p[0].y), c2=g2c(p[1].x,p[1].y);
+  gctx.save();
+  gctx.strokeStyle=color; gctx.lineWidth=3.5; gctx.lineCap='round';
+  gctx.beginPath(); gctx.moveTo(c1.x,c1.y); gctx.lineTo(c2.x,c2.y); gctx.stroke();
+  // ラベル①②（線の端、原点から遠い側）
+  const end = Math.hypot(c1.x-CANVAS_PX/2,c1.y-CANVAS_PX/2) > Math.hypot(c2.x-CANVAS_PX/2,c2.y-CANVAS_PX/2) ? c1 : c2;
+  let lx=end.x, ly=end.y;
+  lx += lx>CANVAS_PX/2 ? -16 : 14;
+  ly += ly>CANVAS_PX/2 ? -10 : 18;
+  lx=Math.max(12,Math.min(CANVAS_PX-12,lx)); ly=Math.max(14,Math.min(CANVAS_PX-8,ly));
+  gctx.fillStyle=color; gctx.font='700 16px Outfit, sans-serif';
+  gctx.textAlign='center'; gctx.textBaseline='middle';
+  gctx.fillText(label,lx,ly); gctx.textBaseline='alphabetic';
+  gctx.restore();
+}
+// 問題のグラフを描画（式ラベル・交点は出さない）
+function drawGraph(q){
+  if(!gctx) return;
+  const g=q.graph; gRange=g.range;
+  gctx.clearRect(0,0,CANVAS_PX,CANVAS_PX);
+  drawGrid();
+  drawGraphLine(g.a1,g.b1,LINE_COLORS[0],'①');
+  drawGraphLine(g.a2,g.b2,LINE_COLORS[1],'②');
+}
+
+/* ===== LaTeX → 有理数 {n,d}（厳密判定用） ===== */
+function gcdI(a,b){ a=Math.abs(a);b=Math.abs(b); while(b){[a,b]=[b,a%b];} return a||1; }
+function reduceRat(n,d){
+  if(d===0) return null;
+  if(d<0){ n=-n; d=-d; }
+  const g=gcdI(n,d); return { n:n/g, d:d/g };
+}
+// 生徒入力(LaTeX/プレーン)を有理数 {n,d} に。分数・整数・先頭マイナス・\frac{-a}{b}・-\frac{a}{b} を同一視。
+function latexToRat(latex){
+  if(latex==null) return null;
+  let s = String(latex).replace(/\s+/g,'');
+  s = s.replace(/\\left|\\right|\\,|\\!|\\;|\\cdot|\\mleft|\\mright|\\operatorname/g,'');
+  s = s.replace(/[−ー–—]/g,'-').replace(/[＋]/g,'+').replace(/[／]/g,'/');
+  s = s.replace(/\\dfrac/g,'\\frac').replace(/\\tfrac/g,'\\frac');
+  // \frac{a}{b}（中括弧省略の1文字パターンも補正）
+  s = s.replace(/\\frac([^{])([^{])/g,'\\frac{$1}{$2}');
+  s = s.replace(/\\frac{([^{])}([^{])/g,'\\frac{$1}{$2}');
+  s = s.replace(/\\frac([^{]){([^{]+)}/g,'\\frac{$1}{$2}');
+  if(s==='') return null;
+  // 先頭マイナス + \frac{p}{q}
+  let m = s.match(/^(-?)\\frac\{(-?\d+)\}\{(-?\d+)\}$/);
+  if(m){
+    let n=parseInt(m[2],10), d=parseInt(m[3],10);
+    if(m[1]==='-') n=-n;
+    return reduceRat(n,d);
+  }
+  // a/b プレーン分数
+  m = s.match(/^(-?\d+)\/(-?\d+)$/);
+  if(m) return reduceRat(parseInt(m[1],10),parseInt(m[2],10));
+  // 整数
+  if(/^-?\d+$/.test(s)) return reduceRat(parseInt(s,10),1);
+  return null;
+}
+// 2つの有理数が値として等しいか（既約化して分子・分母一致）
+function ratEq(a,b){ return a&&b&&a.n===b.n&&a.d===b.d; }
 
 /* ===== レベル選択 ===== */
 document.querySelectorAll('.level-btn').forEach(btn=>{
@@ -117,11 +226,11 @@ function loadQuestion(){
   $('progress-fill').style.width=(idx/session.length*100)+'%';
   $('score-display').textContent=score+'点';
   $('question-label').innerHTML=q.label;
-  $('question-display').innerHTML=q.display||'';
+  drawGraph(q);
   $('question-extra').innerHTML=q.extra||'';
   $('feedback-box').className='feedback-box hidden';
-  $('hint-text').className='hint-text hidden';
-  $('hint-btn').classList.remove('hidden'); $('hint-btn').textContent='💡 ヒント';
+  resetHints();
+  $('hint-btn').classList.remove('hidden'); $('hint-btn').textContent='💡 ヒント'; $('hint-btn').disabled=false;
   $('submit-btn').classList.remove('hidden'); $('submit-btn').disabled=false;
   $('next-btn').classList.add('hidden');
   buildFields(q);
@@ -134,9 +243,9 @@ function submit(){
   const q=session[idx];
   const userVals=fields.map(getVal);
   if(userVals.some(v=>!v||!v.trim())){ flashNote('全部のマスを入力してね！'); return; }
-  const ok = q.answers.every((a,i)=>{
-    const v=latexToNumber(userVals[i]);
-    return !isNaN(v) && Math.abs(v-a)<1e-9;
+  const ok = q.answersRat.every((a,i)=>{
+    const v=latexToRat(userVals[i]);
+    return ratEq(v,a);
   });
   finishQuestion(ok, userVals);
 }
@@ -148,7 +257,9 @@ function flashNote(msg){
   clearTimeout(noteTimer); noteTimer=setTimeout(()=>{ note.textContent=note.dataset.orig; note.style.color=''; },1600);
 }
 function userEqLatex(q,userVals){
-  return q.inputs.map((inp,i)=>`${inp.before||''} ${cleanLatex(userVals[i]||'?')} ${inp.after||''}`).join(' ');
+  // 区切り記号(\(...\))を含む inputs テンプレは使わず、答えと同じ \left(x,\ y\right) 形式で組む
+  const v=userVals.map(s=>cleanLatex((s&&String(s).trim())?s:'?'));
+  return `\\left(${v[0]},\\ ${v[1]}\\right)`;
 }
 function cleanLatex(s){ return String(s).replace(/\\dfrac/g,'\\frac'); }
 
@@ -163,7 +274,7 @@ function finishQuestion(ok,userVals,gaveUp){
   if(ok){ fb.innerHTML='<div class="fb-row" style="font-weight:700;font-size:2.2vh">⭕ 正解！</div>'; }
   else{
     fb.innerHTML=`<div class="fb-row" style="font-weight:700;font-size:2.2vh">${gaveUp?'🏳️ ギブアップ':'❌ ざんねん…'}</div>
-      <div class="fb-row"><span class="fb-label">あなたの解答：</span> \\(${userVals?userEqLatex(q,userVals):'（なし）'}\\)</div>
+      <div class="fb-row"><span class="fb-label">あなたの解答：</span> ${userVals?`\\(${userEqLatex(q,userVals)}\\)`:'（なし）'}</div>
       <div class="fb-row"><span class="fb-label">正しい答え：</span> \\(${q.answerLatex}\\)</div>
       <div class="fb-row"><span class="fb-label">解き方：</span> ${q.solution}</div>`;
   }
@@ -174,16 +285,37 @@ function finishQuestion(ok,userVals,gaveUp){
   if(ok) try{ confetti({particleCount:60,spread:55,origin:{y:.7}}); }catch(_){}
 }
 
-/* ヒント */
+/* ヒント（積み重ね式） */
+function resetHints(){
+  const box=$('hint-text');
+  box.innerHTML=''; box.className='hint-text hidden';
+  const main=document.querySelector('.quiz-main');
+  if(main) main.classList.remove('two-col');
+}
+function appendHint(html,stepNo,isAnswer){
+  const box=$('hint-text');
+  box.classList.remove('hidden');
+  const block=document.createElement('div');
+  block.className='hint-step'+(isAnswer?' hint-step--answer':'');
+  const label=isAnswer?'答え':('ステップ'+stepNo);
+  block.innerHTML='<span class="hint-step-no">'+label+'</span>'
+    +'<span class="hint-step-body">'+html+'</span>';
+  box.appendChild(block);
+  const main=document.querySelector('.quiz-main');
+  if(main && box.querySelectorAll('.hint-step').length>=2) main.classList.add('two-col');
+  typeset(box);
+  box.scrollTop=box.scrollHeight;
+}
 $('hint-btn').onclick=()=>{
   if(locked) return;
   const q=session[idx];
   if(hintStep>=q.hints.length-1){
     if(!confirm('⚠️ 次のヒントは答えだよ！見ると不正解（ギブアップ）になるけど見る？')) return;
-    $('hint-text').innerHTML=q.hints[q.hints.length-1]; $('hint-text').classList.remove('hidden'); typeset($('hint-text'));
-    finishQuestion(false, fields.map(getVal), true); return;
+    appendHint(q.hints[q.hints.length-1], hintStep+1, true);
+    const cur=fields.map(getVal);
+    finishQuestion(false, cur.some(v=>v&&String(v).trim())?cur:null, true); return;
   }
-  $('hint-text').innerHTML=q.hints[hintStep]; $('hint-text').classList.remove('hidden'); typeset($('hint-text'));
+  appendHint(q.hints[hintStep], hintStep+1, false);
   hintStep++;
   if(hintStep>=q.hints.length-1) $('hint-btn').textContent='⚠️ 答えを見る';
 };
@@ -227,7 +359,7 @@ $('review-wrong-btn').onclick=()=>{
 $('reset-btn').onclick=()=>{ if(confirm('学習履歴と最高スコアを消すよ。いい？')){ store.del(STORE_KEY); renderHome(); } };
 
 /* ===== 起動 ===== */
-function boot(){ renderHome(); }
+function boot(){ setupCanvas(); renderHome(); }
 if(document.readyState==='loading') window.addEventListener('DOMContentLoaded',boot); else boot();
 
 })();

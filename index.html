@@ -28,9 +28,9 @@
       <div class="level-select">
         <p class="level-label">レベルをえらぼう</p>
         <div class="level-btns">
-          <button class="level-btn active" data-level="1"><b>Lv.1</b><span>両方y=</span></button>
-          <button class="level-btn" data-level="2"><b>Lv.2</b><span>片方ax+by=c</span></button>
-          <button class="level-btn" data-level="3"><b>Lv.3</b><span>両方ax+by=c</span></button>
+          <button class="level-btn active" data-level="1"><b>Lv.1</b><span>整数の傾き</span></button>
+          <button class="level-btn" data-level="2"><b>Lv.2</b><span>分数の傾き</span></button>
+          <button class="level-btn" data-level="3"><b>Lv.3</b><span>応用</span></button>
         </div>
       </div>
 
@@ -59,23 +59,31 @@
 
     <main class="quiz-main single">
       <section class="center-panel">
-        <div class="question-card">
-          <p class="question-label" id="question-label">交点の座標を求めなさい</p>
-          <div id="question-display" class="equation-display"></div>
-          <div id="question-extra" class="question-extra"></div>
-        </div>
-
-        <div class="answer-zone">
-          <div class="answer-row" id="answer-row"><!-- JSが入力欄を生成 --></div>
-          <p class="input-note">※半角で入力してね（分数は <span class="kbd">a/b</span> ボタン）</p>
-          <div class="helper-keys">
-            <button class="hkey" data-cmd="frac">a/b 分数</button>
-            <button class="hkey" data-cmd="minus">−</button>
-            <button class="hkey" data-cmd="clear">クリア</button>
+        <div class="main-left">
+          <div class="question-card">
+            <p class="question-label" id="question-label">グラフの2直線の交点の座標を求めなさい</p>
+            <div class="graph-wrap">
+              <canvas id="graph-canvas" class="graph-canvas"></canvas>
+            </div>
+            <div class="graph-legend">
+              <span class="lg-item"><span class="lg-line lg1"></span>直線①</span>
+              <span class="lg-item"><span class="lg-line lg2"></span>直線②</span>
+            </div>
+            <div id="question-extra" class="question-extra"></div>
           </div>
-        </div>
 
-        <div id="feedback-box" class="feedback-box hidden"></div>
+          <div class="answer-zone">
+            <div class="answer-row" id="answer-row"><!-- JSが入力欄を生成 --></div>
+            <p class="input-note">※半角で入力してね（分数は <span class="kbd">a/b</span> ボタン）</p>
+            <div class="helper-keys">
+              <button class="hkey" data-cmd="frac">a/b 分数</button>
+              <button class="hkey" data-cmd="minus">−</button>
+              <button class="hkey" data-cmd="clear">クリア</button>
+            </div>
+          </div>
+
+          <div id="feedback-box" class="feedback-box hidden"></div>
+        </div>
 
         <div class="hint-area">
           <button id="hint-btn" class="btn-hint">💡 ヒント</button>
