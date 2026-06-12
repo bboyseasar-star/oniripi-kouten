@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>鬼リピ〜交点マスター〜</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)']] },
+      options: { skipHtmlTags: ['script','noscript','style','textarea','pre'] },
+      startup: { typeset: false }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ════ スタート画面 ════ -->
+  <div id="screen-start" class="screen active">
+    <div class="start-card">
+      <div class="app-logo">🔥</div>
+      <h1 class="app-title">鬼リピ</h1>
+      <p class="app-subtitle">〜交点マスター〜</p>
+
+      <div class="level-select">
+        <p class="level-label">レベルをえらぼう</p>
+        <div class="level-btns">
+          <button class="level-btn active" data-level="1"><b>Lv.1</b><span>両方y=</span></button>
+          <button class="level-btn" data-level="2"><b>Lv.2</b><span>片方ax+by=c</span></button>
+          <button class="level-btn" data-level="3"><b>Lv.3</b><span>両方ax+by=c</span></button>
+        </div>
+      </div>
+
+      <div class="highscore-box"><span>👑 最高スコア</span><strong id="high-score">--</strong><span>点</span></div>
+
+      <div class="history-box">
+        <div class="history-header"><span>📋 学習履歴</span><button id="reset-btn" class="btn-ghost-sm">リセット</button></div>
+        <div id="history-list" class="history-list"><p class="no-history">まだ記録がないよ！</p></div>
+      </div>
+
+      <button id="start-btn" class="btn-primary lg">▶ スタート！</button>
+    </div>
+  </div>
+
+  <!-- ════ クイズ画面 ════ -->
+  <div id="screen-quiz" class="screen">
+    <header class="quiz-header">
+      <button id="quit-btn" class="quit-btn">🏠 中断</button>
+      <div class="header-brand">🔥 鬼リピ <span id="level-tag" class="level-tag">Lv.1</span></div>
+      <div class="header-progress">
+        <span id="q-counter">Q 1 / 5</span>
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
+      </div>
+      <div id="score-display" class="header-score">0点</div>
+    </header>
+
+    <main class="quiz-main single">
+      <section class="center-panel">
+        <div class="question-card">
+          <p class="question-label" id="question-label">交点の座標を求めなさい</p>
+          <div id="question-display" class="equation-display"></div>
+          <div id="question-extra" class="question-extra"></div>
+        </div>
+
+        <div class="answer-zone">
+          <div class="answer-row" id="answer-row"><!-- JSが入力欄を生成 --></div>
+          <p class="input-note">※半角で入力してね（分数は <span class="kbd">a/b</span> ボタン）</p>
+          <div class="helper-keys">
+            <button class="hkey" data-cmd="frac">a/b 分数</button>
+            <button class="hkey" data-cmd="minus">−</button>
+            <button class="hkey" data-cmd="clear">クリア</button>
+          </div>
+        </div>
+
+        <div id="feedback-box" class="feedback-box hidden"></div>
+
+        <div class="hint-area">
+          <button id="hint-btn" class="btn-hint">💡 ヒント</button>
+          <div id="hint-text" class="hint-text hidden"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="quiz-footer">
+      <button id="submit-btn" class="btn-primary">✅ 決定！</button>
+      <button id="next-btn" class="btn-secondary hidden">次へ →</button>
+    </footer>
+  </div>
+
+  <!-- ════ 結果画面 ════ -->
+  <div id="screen-result" class="screen">
+    <div class="result-card">
+      <div class="result-header">
+        <h2>結果発表！</h2>
+        <div id="result-score" class="result-score"></div>
+        <div id="result-badge" class="result-badge"></div>
+      </div>
+      <div class="review-section">
+        <h3>振り返り</h3>
+        <div id="review-list" class="review-list"></div>
+      </div>
+      <div class="result-actions">
+        <button id="retry-btn" class="btn-primary">🔁 もう一度！</button>
+        <button id="review-wrong-btn" class="btn-secondary hidden">❌ まちがいだけ復習</button>
+        <button id="home-btn" class="btn-secondary">🏠 ホームへ</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="https://unpkg.com/mathlive@0.98.4/dist/mathlive.min.js"></script>
+  <script src="questions.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
