@@ -88,6 +88,10 @@
         <div class="hint-area">
           <button id="hint-btn" class="btn-hint">💡 ヒント</button>
           <div id="hint-text" class="hint-text hidden"></div>
+          <div class="memo-area">
+            <div class="memo-head"><span class="memo-label">✏️ 計算メモ</span><button id="memo-clear" class="memo-clear" type="button">全消し</button></div>
+            <canvas id="memo-canvas" class="memo-canvas"></canvas>
+          </div>
         </div>
       </section>
     </main>
@@ -114,6 +118,19 @@
         <button id="retry-btn" class="btn-primary">🔁 もう一度！</button>
         <button id="review-wrong-btn" class="btn-secondary hidden">❌ まちがいだけ復習</button>
         <button id="home-btn" class="btn-secondary">🏠 ホームへ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ 確認モーダル ════ -->
+  <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card" id="modal-card">
+      <div class="modal-icon" id="modal-icon">⚠️</div>
+      <h2 class="modal-title" id="modal-title">確認</h2>
+      <p class="modal-message" id="modal-message"></p>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="modal-btn modal-btn--cancel">キャンセル</button>
+        <button id="modal-ok" class="modal-btn modal-btn--ok">OK</button>
       </div>
     </div>
   </div>
