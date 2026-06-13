@@ -120,21 +120,22 @@ math-field::part(virtual-keyboard-toggle),math-field::part(menu-toggle){display:
 .hint-area{display:flex;flex-direction:column;align-items:center;gap:1vh;min-height:0}
 .btn-hint{background:var(--bg2);color:var(--fire);font-weight:700;border:2px solid var(--fire2);border-radius:12px;padding:1vh 2vw;font-size:1.9vh}
 .btn-hint:disabled{opacity:.5;cursor:not-allowed}
-.hint-text{display:flex;flex-direction:column;gap:1vh;width:min(620px,92vw);text-align:left;min-height:0;overflow-y:auto}
+.hint-text{display:flex;flex-direction:column;gap:1vh;width:100%;text-align:left;min-height:0;overflow-y:auto;flex:1 1 auto}
+/* ヒント未表示のプレースホルダー（右カラムが空でも不安にならないように） */
+.hint-placeholder{background:#fffbeb;border:2px dashed var(--fire2);border-radius:12px;padding:1.4vh 1.6vw;font-size:1.7vh;color:var(--muted);text-align:center;line-height:1.6;opacity:.85}
 /* 積み重ねヒントの各ステップ */
 .hint-step{background:#fffbeb;border:2px dashed var(--fire2);border-radius:12px;padding:1.2vh 1.6vw;font-size:1.8vh;line-height:1.6;display:flex;flex-direction:column;gap:.5vh}
 .hint-step-no{align-self:flex-start;background:var(--fire2);color:#fff;font-weight:700;font-size:1.4vh;padding:.2vh 1vw;border-radius:20px}
 .hint-step--answer{background:#fff1f2;border:2px solid var(--ember)}
 .hint-step--answer .hint-step-no{background:var(--ember)}
 
-/* ── 2カラム化（ヒントが積み重なってスペースが足りないとき） ── */
-.center-panel{min-height:0}
-.main-left{display:flex;flex-direction:column;gap:1.6vh;justify-content:center;min-height:0}
-.quiz-main.two-col{justify-content:center}
-.quiz-main.two-col .center-panel{flex-direction:row;align-items:stretch;gap:2vw;width:min(1100px,96vw)}
-.quiz-main.two-col .main-left{flex:1 1 50%;justify-content:flex-start}
-.quiz-main.two-col .hint-area{flex:1 1 50%;justify-content:flex-start;max-height:78vh}
-.quiz-main.two-col .hint-text{width:100%;max-height:74vh}
+/* ── 左右2カラム固定（最初から右にヒント欄の幅を確保。ヒントが増えても左は動かない） ── */
+.quiz-main{justify-content:center}
+.center-panel{min-height:0;flex-direction:row;align-items:stretch;gap:2vw;width:min(1100px,96vw)}
+.main-left{display:flex;flex-direction:column;gap:1.6vh;justify-content:flex-start;min-height:0;flex:1 1 52%}
+.hint-area{flex:1 1 48%;justify-content:flex-start;align-items:stretch;max-height:80vh}
+.hint-text{width:100%;max-height:74vh}
+.btn-hint{align-self:center}
 
 .quiz-footer{width:100%;display:flex;gap:2vw;justify-content:center;padding-bottom:1vh}
 .quiz-footer button{min-width:30vw;font-size:2.4vh;padding:1.6vh 0}

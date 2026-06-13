@@ -58,6 +58,36 @@ function latticePoints(a, b, R) {
   return pts;
 }
 
+// ヒント用：切片(0,b)と「右どなりの一番近い格子点」を返す。
+// 直線 y=(a.n/a.d)x+b の格子点は x が a.d の倍数のところ。
+// 右どなりは x=a.d → (a.d, b+a.n)。範囲(±(R-1))外なら、範囲内にある0に一番近い格子点を採用し、
+// 「右に/左に・上に/下に」の向き表現も実際に合わせる（堅牢に）。
+function hintDots(a, b, R) {
+  const lim = R - 1;                 // グリッドの目盛りが見える範囲
+  const q = a.d;                     // x はこの倍数で格子点
+  const p = a.n;                     // x が +q 増えると y は +p
+  const b0 = [0, b];
+  // 候補：x = k*q（k=±1,±2,…）のうち、(x,y) が範囲内で原点に一番近いもの。右(k>0)を優先。
+  let best = null;                   // {x,y,k}
+  for (let k = 1; k <= 2 * R; k++) {
+    for (const s of [1, -1]) {       // まず右(+)、なければ左(-)
+      const x = s * k * q;
+      const y = b + s * k * p;
+      if (Math.abs(x) > lim || Math.abs(y) > lim) continue;
+      // 右どなり(k=1,s=1)を最優先。それ以外は |x| が最小のものを選ぶ。
+      if (!best) { best = { x, y, dirRight: s > 0 }; }
+      break;
+    }
+    if (best) break;
+  }
+  // 万一見つからなければ切片だけ返す（描画は1点のみ）
+  if (!best) return { p0: b0, p1: null, readText: '' };
+  const dx = best.x - 0, dy = best.y - b;
+  const hStr = (dx >= 0 ? '右に' : '左に') + Math.abs(dx);
+  const vStr = (dy >= 0 ? '上に' : '下に') + Math.abs(dy);
+  return { p0: b0, p1: [best.x, best.y], readText: `${hStr}・${vStr}、で傾きが読めるね` };
+}
+
 // 2直線の交点を有理数で求める：交点 x=(b2-b1)/(a1-a2)
 function intersect(a1, b1, a2, b2) {
   // a1,a2 は {n,d}。a1-a2 = (a1.n*a2.d - a2.n*a1.d)/(a1.d*a2.d)
@@ -71,28 +101,35 @@ function intersect(a1, b1, a2, b2) {
   return { X, Y };
 }
 
-/* ===== 4ステップ ヒント生成 ===== */
-function buildHints(a1, b1, a2, b2, X, Y) {
+/* ===== 6ステップ ヒント生成（点を打つ→自分で式を考える→式表示、を2直線ぶん） ===== */
+// d1/d2 は hintDots() の戻り値（切片点・右どなり格子点・読み取りテキスト）
+function buildHints(a1, b1, a2, b2, X, Y, d1, d2) {
   const L1 = lineLatex(a1, b1);
   const L2 = lineLatex(a2, b2);
   // 連立： a1 x + b1 = a2 x + b2  →  (a1-a2)x = b2-b1  →  x = ...
   const dN = a1.n * a2.d - a2.n * a1.d; // 傾き差の分子（共通分母 a1.d*a2.d）
   const dD = a1.d * a2.d;
   const diffB = b2 - b1;
-  // 表示用： (a1-a2)x = (b2-b1)
   const slopeDiffR = reduce(dN, dD);
   const coefStr = isInt(slopeDiffR)
     ? (slopeDiffR.n === 1 ? '' : slopeDiffR.n === -1 ? '-' : String(slopeDiffR.n))
     : ratLatex(slopeDiffR);
-  const moveStep = `\\((${slopeTerm(a1) || '0'})-(${slopeTerm(a2) || '0'})x\\) を移項して整理`;
   const solveX =
     `\\(${L1.slice(2)}=${L2.slice(2)}\\) を解くと、` +
     `\\(${coefStr}x=${diffB}\\Rightarrow x=${ratLatex(X)}\\)`;
 
   return [
-    `直線①が通る格子点を2つ読んで、傾きと切片から式を立てよう。例：直線① \\(${L1}\\)`,
-    `直線②も同じように、格子点2つから式を立てよう。直線② \\(${L2}\\)`,
+    // 1: 直線①に点を打つ（式は出さない）
+    `直線①の<b>切片の点</b>と、その<b>右の一番近い格子点</b>に注目（グラフに●を打ったよ）。${d1.readText}`,
+    // 2: 直線①の式
+    `直線①の式は \\(${L1}\\)`,
+    // 3: 直線②にも点を打つ
+    `直線②も同じように読もう（グラフに●を打ったよ）。${d2.readText}`,
+    // 4: 直線②の式
+    `直線②の式は \\(${L2}\\)`,
+    // 5: 連立して x
     `2式を連立して \\(x\\) を解こう。${solveX}`,
+    // 6: （答え）代入して y、交点
     `\\(x=${ratLatex(X)}\\) を代入して \\(y=${ratLatex(Y)}\\)。交点 \\(\\left(${ratLatex(X)},\\ ${ratLatex(Y)}\\right)\\)`
   ];
 }
@@ -108,6 +145,12 @@ function buildQuestion(level, a1, b1, a2, b2, R) {
   if (latticePoints(a1, b1, R).length < 2) return null;
   if (latticePoints(a2, b2, R).length < 2) return null;
 
+  // ヒント用：各直線の「切片点」と「右どなりの格子点」
+  const d1 = hintDots(a1, b1, R);
+  const d2 = hintDots(a2, b2, R);
+  // 右どなり格子点が範囲内に取れない問題は採用しない（点が打てないと体験が崩れる）
+  if (!d1.p1 || !d2.p1) return null;
+
   return {
     level,
     label: 'グラフの2直線の交点の座標を求めなさい',
@@ -119,7 +162,12 @@ function buildQuestion(level, a1, b1, a2, b2, R) {
     // 答えは有理数（分子・分母ペア）
     answersRat: [X, Y],
     answerLatex: `\\left(${ratLatex(X)},\\ ${ratLatex(Y)}\\right)`,
-    hints: buildHints(a1, b1, a2, b2, X, Y),
+    // ヒントでグラフに打つ点（step1→直線①, step3→直線②）
+    hintGraph: {
+      line1: [d1.p0, d1.p1],   // [[0,b1],[gx,gy]]
+      line2: [d2.p0, d2.p1]
+    },
+    hints: buildHints(a1, b1, a2, b2, X, Y, d1, d2),
     solution:
       `直線①②の式を読み、連立して \\(x=${ratLatex(X)}\\)、` +
       `代入して \\(y=${ratLatex(Y)}\\)。交点 \\(\\left(${ratLatex(X)},\\ ${ratLatex(Y)}\\right)\\)`
@@ -229,5 +277,5 @@ function generateSession(level, count = 5) {
 
 // Node環境（検証用）でも使えるようにエクスポート
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateSession, reduce, intersect, ratLatex, latticePoints, gcd };
+  module.exports = { generateSession, reduce, intersect, ratLatex, latticePoints, gcd, hintDots, lineLatex };
 }

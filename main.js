@@ -14,7 +14,7 @@ function loadData(){ try{ return JSON.parse(store.get(STORE_KEY))||{high:0,histo
 function saveData(d){ store.set(STORE_KEY, JSON.stringify(d)); }
 
 /* ===== 状態 ===== */
-let level=1, session=[], idx=0, score=0, hintStep=0, locked=false, results=[];
+let level=1, session=[], idx=0, score=0, hintStep=0, hintGraphLevel=0, locked=false, results=[];
 let fields=[];
 let lastFocused=null;
 const QN = 5;
@@ -102,14 +102,41 @@ function drawGraphLine(a,b,color,label){
   gctx.fillText(label,lx,ly); gctx.textBaseline='alphabetic';
   gctx.restore();
 }
-// 問題のグラフを描画（式ラベル・交点は出さない）
-function drawGraph(q){
+// ヒント用の格子点●（oniripi-1ji-graph の drawHintDot 方式）
+function drawHintDot(gx,gy,label,color){
+  const c=g2c(gx,gy);
+  gctx.save();
+  gctx.fillStyle='rgba(245,158,11,.18)';
+  gctx.beginPath(); gctx.arc(c.x,c.y,15,0,Math.PI*2); gctx.fill();
+  gctx.fillStyle=color||'#f59e0b'; gctx.strokeStyle='#fff'; gctx.lineWidth=2;
+  gctx.beginPath(); gctx.arc(c.x,c.y,8,0,Math.PI*2); gctx.fill(); gctx.stroke();
+  if(label){
+    gctx.fillStyle='#b45309'; gctx.font='700 11px Outfit, sans-serif';
+    gctx.textAlign='center';
+    // 上が範囲外に近いときはラベルを下に出す
+    const ly = gy>=gRange-1 ? c.y+20 : c.y-16;
+    gctx.fillText(label,c.x,ly);
+  }
+  gctx.restore();
+}
+// 問題のグラフを描画（式ラベル・交点は出さない）。
+// hintGraphLevel: 0=線のみ, 1=直線①の2点, 2=両直線の点
+function drawGraph(q, hintGraphLevel){
   if(!gctx) return;
+  const lvl = hintGraphLevel||0;
   const g=q.graph; gRange=g.range;
   gctx.clearRect(0,0,CANVAS_PX,CANVAS_PX);
   drawGrid();
   drawGraphLine(g.a1,g.b1,LINE_COLORS[0],'①');
   drawGraphLine(g.a2,g.b2,LINE_COLORS[1],'②');
+  // ヒントの格子点（切片点＋右どなりの格子点）
+  const hg=q.hintGraph;
+  if(lvl>=1 && hg && hg.line1){
+    hg.line1.forEach(p=>{ if(p) drawHintDot(p[0],p[1],`(${p[0]}, ${p[1]})`); });
+  }
+  if(lvl>=2 && hg && hg.line2){
+    hg.line2.forEach(p=>{ if(p) drawHintDot(p[0],p[1],`(${p[0]}, ${p[1]})`); });
+  }
 }
 
 /* ===== LaTeX → 有理数 {n,d}（厳密判定用） ===== */
@@ -220,13 +247,13 @@ function startGame(reuse){
   show('quiz'); loadQuestion();
 }
 function loadQuestion(){
-  locked=false; hintStep=0;
+  locked=false; hintStep=0; hintGraphLevel=0;
   const q=session[idx];
   $('q-counter').textContent=`Q ${idx+1} / ${session.length}`;
   $('progress-fill').style.width=(idx/session.length*100)+'%';
   $('score-display').textContent=score+'点';
   $('question-label').innerHTML=q.label;
-  drawGraph(q);
+  drawGraph(q, 0);
   $('question-extra').innerHTML=q.extra||'';
   $('feedback-box').className='feedback-box hidden';
   resetHints();
@@ -285,24 +312,26 @@ function finishQuestion(ok,userVals,gaveUp){
   if(ok) try{ confetti({particleCount:60,spread:55,origin:{y:.7}}); }catch(_){}
 }
 
-/* ヒント（積み重ね式） */
+/* ヒント（積み重ね式・右カラム固定） */
+const HINT_PLACEHOLDER='<div class="hint-placeholder">💡 ヒントを押すと、ここに順番に出るよ</div>';
 function resetHints(){
   const box=$('hint-text');
-  box.innerHTML=''; box.className='hint-text hidden';
-  const main=document.querySelector('.quiz-main');
-  if(main) main.classList.remove('two-col');
+  // 右カラムは最初から表示（空でもプレースホルダーで埋める）
+  box.className='hint-text';
+  box.innerHTML=HINT_PLACEHOLDER;
 }
 function appendHint(html,stepNo,isAnswer){
   const box=$('hint-text');
   box.classList.remove('hidden');
+  // 最初のヒントが出たらプレースホルダーを消す
+  const ph=box.querySelector('.hint-placeholder');
+  if(ph) ph.remove();
   const block=document.createElement('div');
   block.className='hint-step'+(isAnswer?' hint-step--answer':'');
   const label=isAnswer?'答え':('ステップ'+stepNo);
   block.innerHTML='<span class="hint-step-no">'+label+'</span>'
     +'<span class="hint-step-body">'+html+'</span>';
   box.appendChild(block);
-  const main=document.querySelector('.quiz-main');
-  if(main && box.querySelectorAll('.hint-step').length>=2) main.classList.add('two-col');
   typeset(box);
   box.scrollTop=box.scrollHeight;
 }
@@ -315,7 +344,12 @@ $('hint-btn').onclick=()=>{
     const cur=fields.map(getVal);
     finishQuestion(false, cur.some(v=>v&&String(v).trim())?cur:null, true); return;
   }
-  appendHint(q.hints[hintStep], hintStep+1, false);
+  // これから見せるステップ（1始まり）：ステップ1で直線①の点、ステップ3で直線②の点を打つ
+  const stepNo = hintStep+1;
+  if(stepNo===1 && hintGraphLevel<1) hintGraphLevel=1;
+  if(stepNo===3 && hintGraphLevel<2) hintGraphLevel=2;
+  drawGraph(q, hintGraphLevel);   // 点を打ってから
+  appendHint(q.hints[hintStep], stepNo, false);  // テキストを積む
   hintStep++;
   if(hintStep>=q.hints.length-1) $('hint-btn').textContent='⚠️ 答えを見る';
 };
