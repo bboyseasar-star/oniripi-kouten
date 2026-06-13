@@ -197,11 +197,11 @@ math-field::part(virtual-keyboard-toggle),math-field::part(menu-toggle){display:
 @keyframes modalPop{from{opacity:0;transform:translateY(12px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
 
 /* ── 手書き計算メモ（交点：右ヒント欄内に配置・グラフ高さを侵食しない） ── */
-.memo-area{display:flex;flex-direction:column;gap:.6vh;background:var(--card);border:2px solid var(--line);border-radius:14px;padding:1vh 1.2vw;min-height:0;}
+.memo-area{display:flex;flex-direction:column;gap:.6vh;background:var(--card);border:2px solid var(--line);border-radius:14px;padding:1vh 1.2vw;min-height:0;overflow:hidden;}
 .memo-head{display:flex;align-items:center;justify-content:space-between}
 .memo-label{font-size:1.6vh;font-weight:700;color:var(--fire)}
 .memo-clear{background:var(--bg2);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:.4vh 1.2vw;font-size:1.4vh;font-weight:700;font-family:var(--font-family);cursor:pointer;min-height:32px;}
 .memo-clear:hover{border-color:var(--fire);color:var(--fire)}
-.memo-canvas{width:100%;flex:1 1 auto;touch-action:none;border-radius:10px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--line) 27px,var(--line) 28px),var(--bg);cursor:crosshair;}
+.memo-canvas{width:100%;flex:1 1 0;min-height:0;display:block;touch-action:none;border-radius:10px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--line) 27px,var(--line) 28px),var(--bg);cursor:crosshair;}
 .hint-area .memo-area{margin-top:auto;max-height:24vh}
 .hint-area .memo-canvas{min-height:14vh}
