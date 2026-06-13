@@ -58,34 +58,23 @@ function latticePoints(a, b, R) {
   return pts;
 }
 
-// ヒント用：切片(0,b)と「右どなりの一番近い格子点」を返す。
-// 直線 y=(a.n/a.d)x+b の格子点は x が a.d の倍数のところ。
-// 右どなりは x=a.d → (a.d, b+a.n)。範囲(±(R-1))外なら、範囲内にある0に一番近い格子点を採用し、
-// 「右に/左に・上に/下に」の向き表現も実際に合わせる（堅牢に）。
+// ヒント用：切片(0,b)と「右どなりの格子点」を返す。
+// 直線 y=(a.n/a.d)x+b の格子点は x が a.d の倍数のところ。右どなりは x=a.d → (a.d, b+a.n)。
+// グラフ読み取りは必ず「右に□・上(下)に□」で数えさせる（符号の混乱を避ける指導方針）ため、
+// 読み取りは常に右向きで表現し、右どなりの点が画面外なら p1=null を返して出題を不採用にする
+//（buildQuestion 側で d1.p1/d2.p1 が無い問題は捨てる）。左に戻る読み方は絶対にさせない。
 function hintDots(a, b, R) {
   const lim = R - 1;                 // グリッドの目盛りが見える範囲
-  const q = a.d;                     // x はこの倍数で格子点
-  const p = a.n;                     // x が +q 増えると y は +p
+  const q = a.d;                     // x はこの倍数で格子点（既約分母, >0）
+  const p = a.n;                     // 右に q 進むと上下に p
   const b0 = [0, b];
-  // 候補：x = k*q（k=±1,±2,…）のうち、(x,y) が範囲内で原点に一番近いもの。右(k>0)を優先。
-  let best = null;                   // {x,y,k}
-  for (let k = 1; k <= 2 * R; k++) {
-    for (const s of [1, -1]) {       // まず右(+)、なければ左(-)
-      const x = s * k * q;
-      const y = b + s * k * p;
-      if (Math.abs(x) > lim || Math.abs(y) > lim) continue;
-      // 右どなり(k=1,s=1)を最優先。それ以外は |x| が最小のものを選ぶ。
-      if (!best) { best = { x, y, dirRight: s > 0 }; }
-      break;
-    }
-    if (best) break;
+  const x = q, y = b + p;            // 切片の「右どなり」格子点（必ず右へ進む）
+  // 切片点・右どなり点のどちらかが見える範囲外なら不採用（左で代用＝左に数えさせない）
+  if (Math.abs(b) > lim || Math.abs(x) > lim || Math.abs(y) > lim) {
+    return { p0: b0, p1: null, readText: '' };
   }
-  // 万一見つからなければ切片だけ返す（描画は1点のみ）
-  if (!best) return { p0: b0, p1: null, readText: '' };
-  const dx = best.x - 0, dy = best.y - b;
-  const hStr = (dx >= 0 ? '右に' : '左に') + Math.abs(dx);
-  const vStr = (dy >= 0 ? '上に' : '下に') + Math.abs(dy);
-  return { p0: b0, p1: [best.x, best.y], readText: `${hStr}・${vStr}、で傾きが読めるね` };
+  const vStr = (p >= 0 ? '上に' : '下に') + Math.abs(p);
+  return { p0: b0, p1: [x, y], readText: `右に${q}・${vStr}、で傾きが読めるね` };
 }
 
 // 2直線の交点を有理数で求める：交点 x=(b2-b1)/(a1-a2)
