@@ -1,2 +1,16 @@
 .DS_Store
 .claude/
+AGENTS.md
+CLAUDE.md
+
+# === Secrets & Credentials (added by hina) ===
+.env
+.env.*
+credentials*
+*.secret.*
+*password*
+*.key
+*.pem
+# clasp (GAS)
+.clasp.json
+.clasprc.json

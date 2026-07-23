@@ -53,6 +53,9 @@ b,strong{font-weight:700}
 .history-item{display:flex;justify-content:space-between;font-size:1.5vh;background:#fff;border-radius:8px;padding:.6vh 1vw;border:1px solid var(--line)}
 .history-item .pass{color:var(--ok);font-weight:700}
 .history-item .fail{color:var(--ng);font-weight:700}
+.legal-links{font-size:1.4vh;color:var(--muted);line-height:1;text-align:center}
+.legal-links a{color:var(--muted);text-underline-offset:2px}
+.legal-links a:hover{color:var(--fire)}
 
 .btn-primary{
   background:linear-gradient(135deg,var(--fire),var(--ember));color:#fff;font-weight:700;

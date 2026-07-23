@@ -434,7 +434,10 @@ function initMemo(){
   resize();
 }
 
-function boot(){ setupCanvas(); renderHome(); initMemo(); }
+function boot(){
+  setupCanvas(); renderHome(); initMemo();
+  window.addEventListener('load',()=>typeset());
+}
 if(document.readyState==='loading') window.addEventListener('DOMContentLoaded',boot); else boot();
 
 })();
