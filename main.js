@@ -47,7 +47,7 @@ function drawGrid(){
     if(g===0) continue;
     const lx=g2c(g,0).x, ly=g2c(0,g).y;
     const major=Math.abs(g)===R-1;
-    gctx.strokeStyle=major?'#cdd6ee':'#e9eefb'; gctx.lineWidth=1;
+    gctx.strokeStyle=major?'#b8c8e5':'#d7e1f3'; gctx.lineWidth=1;
     gctx.beginPath(); gctx.moveTo(lx,0); gctx.lineTo(lx,CANVAS_PX); gctx.stroke();
     gctx.beginPath(); gctx.moveTo(0,ly); gctx.lineTo(CANVAS_PX,ly); gctx.stroke();
   }
