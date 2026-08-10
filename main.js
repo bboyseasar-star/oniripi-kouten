@@ -22,7 +22,11 @@ const QN = 5;
 /* ===== DOM ===== */
 const $ = id=>document.getElementById(id);
 const screens = { start:$('screen-start'), quiz:$('screen-quiz'), result:$('screen-result') };
-function show(name){ Object.values(screens).forEach(s=>s.classList.remove('active')); screens[name].classList.add('active'); }
+function show(name){
+  Object.values(screens).forEach(s=>s.classList.remove('active')); screens[name].classList.add('active');
+  if(window.setWritingMode) window.setWritingMode(name==='quiz' && window.isWritingMode&&window.isWritingMode());
+  if(name!=='quiz' && window.clearWriting) window.clearWriting();
+}
 function typeset(el){ if(window.MathJax&&MathJax.typesetPromise) MathJax.typesetPromise(el?[el]:undefined).catch(()=>{}); }
 
 /* ===== 座標平面の描画（oniripi-1ji-graph 方式を流用） ===== */
@@ -255,6 +259,7 @@ function loadQuestion(){
   $('question-label').innerHTML=q.label;
   drawGraph(q, 0);
   $('question-extra').innerHTML=q.extra||'';
+  screens.quiz.classList.remove('has-feedback');
   $('feedback-box').className='feedback-box hidden';
   resetHints();
   $('hint-btn').classList.remove('hidden'); $('hint-btn').textContent='💡 ヒント'; $('hint-btn').disabled=false;
@@ -262,7 +267,7 @@ function loadQuestion(){
   $('next-btn').classList.add('hidden');
   buildFields(q);
   setTimeout(()=>{ try{ fields[0].focus(); }catch(_){} },60);
-  setTimeout(()=>{ try{ if(window.clearMemo) window.clearMemo(); }catch(_){} },80);
+  setTimeout(()=>{ try{ if(window.clearWriting) window.clearWriting(); }catch(_){} },80);
   typeset(screens.quiz);
 }
 
@@ -303,10 +308,10 @@ function finishQuestion(ok,userVals,gaveUp){
   else{
     fb.innerHTML=`<div class="fb-row" style="font-weight:700;font-size:2.2vh">${gaveUp?'🏳️ ギブアップ':'❌ ざんねん…'}</div>
       <div class="fb-row"><span class="fb-label">あなたの解答：</span> ${userVals?`\\(${userEqLatex(q,userVals)}\\)`:'（なし）'}</div>
-      <div class="fb-row"><span class="fb-label">正しい答え：</span> \\(${q.answerLatex}\\)</div>
-      <div class="fb-row"><span class="fb-label">解き方：</span> ${q.solution}</div>`;
+      <div class="fb-row"><span class="fb-label">正しい答え：</span> \\(${q.answerLatex}\\)</div>`;
   }
   fb.classList.remove('hidden');
+  screens.quiz.classList.add('has-feedback');
   $('submit-btn').classList.add('hidden'); $('hint-btn').classList.add('hidden');
   $('next-btn').classList.remove('hidden');
   typeset(fb);
@@ -410,32 +415,59 @@ function showConfirm({title,message,okText='OK',cancelText='キャンセル',dan
   });
 }
 
-/* ===== 手書き計算メモ（Canvas 2D + Pointer Events） ===== */
-function initMemo(){
-  const canvas=$('memo-canvas'); if(!canvas) return;
+/* ===== クイズ画面全体の手書き（Canvas 2D + Pointer Events） ===== */
+function initWriting(){
+  const canvas=$('write-canvas'); if(!canvas) return;
   const ctx=canvas.getContext('2d');
-  let drawing=false, last=null;
+  let drawing=false, last=null, pointerId=null, writing=false, hasInk=false;
   function resize(){
-    const r=canvas.getBoundingClientRect();
-    if(r.width<=0||r.height<=0) return;
+    const old=document.createElement('canvas');
+    if(canvas.width&&canvas.height){ old.width=canvas.width; old.height=canvas.height; old.getContext('2d').drawImage(canvas,0,0); }
     const dpr=window.devicePixelRatio||1;
-    canvas.width=Math.round(r.width*dpr); canvas.height=Math.round(r.height*dpr);
+    canvas.width=Math.round(window.innerWidth*dpr); canvas.height=Math.round(window.innerHeight*dpr);
+    ctx.setTransform(1,0,0,1,0,0);
+    if(old.width&&old.height) ctx.drawImage(old,0,0,old.width,old.height,0,0,canvas.width,canvas.height);
     ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#334155';
+    ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#4338ca';
   }
-  function pos(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
-  canvas.addEventListener('pointerdown',e=>{ drawing=true; last=pos(e); try{canvas.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); });
-  canvas.addEventListener('pointermove',e=>{ if(!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; e.preventDefault(); });
-  const stop=()=>{ drawing=false; last=null; };
-  canvas.addEventListener('pointerup',stop); canvas.addEventListener('pointercancel',stop); canvas.addEventListener('pointerleave',stop);
-  $('memo-clear').addEventListener('click',()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); });
+  function pos(e){ return {x:e.clientX,y:e.clientY}; }
+  function isControl(target){ return !!(target&&target.closest&&target.closest('button,math-field,input,textarea,select,a,[role="button"],label')); }
+  function stop(){ drawing=false; last=null; pointerId=null; }
+  function clear(){ ctx.clearRect(0,0,canvas.width,canvas.height); hasInk=false; $('write-clear').disabled=true; }
+  function setMode(on){
+    writing=!!on;
+    canvas.classList.toggle('is-visible',writing);
+    $('write-toggle').classList.toggle('is-active',writing);
+    $('write-toggle').setAttribute('aria-pressed',String(writing));
+    $('write-toggle').textContent=writing?'✍️ 書き終わる':'✏️ 書く';
+    $('write-status').classList.toggle('hidden',!writing);
+    if(!writing) stop();
+  }
+  document.addEventListener('pointerdown',e=>{
+    if(!writing||e.button!==0||isControl(e.target)) return;
+    drawing=true; pointerId=e.pointerId; last=pos(e);
+    ctx.beginPath(); ctx.arc(last.x,last.y,1.5,0,Math.PI*2); ctx.fillStyle='#4338ca'; ctx.fill();
+    hasInk=true; $('write-clear').disabled=false; e.preventDefault();
+  },true);
+  document.addEventListener('pointermove',e=>{
+    if(!drawing||e.pointerId!==pointerId) return;
+    if(isControl(e.target)){ stop(); return; }
+    const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p;
+    hasInk=true; $('write-clear').disabled=false; e.preventDefault();
+  },true);
+  document.addEventListener('pointerup',e=>{ if(e.pointerId===pointerId) stop(); },true);
+  document.addEventListener('pointercancel',e=>{ if(e.pointerId===pointerId) stop(); },true);
+  $('write-toggle').addEventListener('click',()=>setMode(!writing));
+  $('write-clear').addEventListener('click',clear);
   window.addEventListener('resize',resize);
-  window.clearMemo=()=>{ resize(); };
+  window.clearWriting=clear;
+  window.setWritingMode=setMode;
+  window.isWritingMode=()=>writing;
   resize();
 }
 
 function boot(){
-  setupCanvas(); renderHome(); initMemo();
+  setupCanvas(); renderHome(); initWriting();
   window.addEventListener('load',()=>typeset());
 }
 if(document.readyState==='loading') window.addEventListener('DOMContentLoaded',boot); else boot();

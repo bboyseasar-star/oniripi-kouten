@@ -79,11 +79,14 @@ b,strong{font-weight:700}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--fire),var(--ember));transition:width .4s}
 .header-score{font-size:2.4vh;font-weight:900;color:var(--ember)}
 
-.quiz-main{width:100%;flex:1;display:flex;gap:2vw;margin:2vh 0;align-items:stretch;min-height:0}
+.quiz-main{width:100%;flex:1;display:flex;gap:2vw;margin:2vh 0 1vh;align-items:stretch;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 .quiz-main.single{justify-content:center}
-.center-panel{width:min(680px,94vw);display:flex;flex-direction:column;gap:1.6vh;justify-content:center}
+.center-panel{width:min(1100px,96vw);display:flex;flex-direction:column;gap:1.6vh;justify-content:center}
 .question-card{background:var(--card);border-radius:18px;padding:2.4vh 2.4vw;box-shadow:var(--shadow);border:2px solid var(--line);text-align:center}
 .question-label{font-size:2vh;color:var(--muted);font-weight:700;margin-bottom:1vh}
+.question-workspace{display:block}
+.graph-section{min-width:0}
+.answer-panel{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.4vh;width:100%}
 .equation-display{font-size:3.6vh;color:var(--ink);min-height:5vh}
 .question-extra{margin-top:1vh;font-size:2vh;overflow-x:auto}
 
@@ -94,6 +97,8 @@ b,strong{font-weight:700}
   background:#fbfcff;border:2px solid var(--line);border-radius:14px;
   touch-action:none;box-shadow:0 4px 14px rgba(249,115,22,.10);
 }
+.has-feedback .graph-canvas{width:min(24vh,36vw);height:min(24vh,36vw)}
+.has-feedback .question-card{padding-top:1.5vh;padding-bottom:1.5vh}
 .graph-legend{display:flex;justify-content:center;gap:2vw;margin-top:.6vh;font-size:1.6vh;font-weight:700;color:var(--ink)}
 .graph-legend .lg-item{display:inline-flex;align-items:center;gap:.6vw}
 .graph-legend .lg-line{width:2.4vw;min-width:18px;height:4px;border-radius:3px;display:inline-block}
@@ -135,14 +140,24 @@ math-field::part(virtual-keyboard-toggle),math-field::part(menu-toggle){display:
 
 /* ── 左右2カラム固定（最初から右にヒント欄の幅を確保。ヒントが増えても左は動かない） ── */
 .quiz-main{justify-content:center}
-.center-panel{min-height:0;flex-direction:row;align-items:stretch;gap:2vw;width:min(1100px,96vw)}
+.center-panel{min-height:0;flex-direction:row;align-items:flex-start;gap:2vw;width:min(1100px,96vw)}
 .main-left{display:flex;flex-direction:column;gap:1.6vh;justify-content:flex-start;min-height:0;flex:1 1 52%}
+.main-left .graph-canvas{width:min(34vh,40vw);height:min(34vh,40vw)}
+#screen-quiz.has-feedback .main-left .graph-canvas{width:min(28vh,36vw);height:min(28vh,36vw)}
 .hint-area{flex:1 1 48%;justify-content:flex-start;align-items:stretch;max-height:80vh}
 .hint-text{width:100%;max-height:74vh}
 .btn-hint{align-self:center}
 
-.quiz-footer{width:100%;display:flex;gap:2vw;justify-content:center;padding-bottom:1vh}
-.quiz-footer button{min-width:30vw;font-size:2.4vh;padding:1.6vh 0}
+.quiz-footer{width:100%;flex:0 0 72px;min-height:72px;display:flex;align-items:center;gap:1vw;justify-content:center;padding-bottom:1vh;position:relative;z-index:20}
+.draw-controls,.answer-actions{display:flex;align-items:center;gap:1vw}
+.answer-actions{width:100%;justify-content:center}
+.answer-actions button{min-width:min(28vw,280px);font-size:2.4vh;padding:1.6vh 0}
+.write-toggle,.write-clear{min-height:48px;border-radius:14px;padding:0 1.2vw;font-size:1.8vh;font-weight:700}
+.write-toggle{background:#fff;color:var(--fire);border:2px solid var(--fire)}
+.write-toggle.is-active{background:linear-gradient(135deg,var(--fire),var(--ember));color:#fff;box-shadow:var(--shadow)}
+.write-clear{background:var(--bg2);color:var(--muted);border:2px solid var(--line)}
+.write-clear:disabled{opacity:.45;cursor:not-allowed}
+.write-status{flex:1;text-align:center;background:#312e81;color:#fff;border-radius:999px;padding:.6vh 1.2vw;font-size:1.5vh;font-weight:700;box-shadow:0 4px 14px rgba(49,46,129,.25)}
 
 /* ── result ── */
 .result-card{background:var(--card);border-radius:24px;box-shadow:var(--shadow);border:2px solid var(--line);padding:3vh 3vw;width:min(640px,94vw);max-height:96vh;display:flex;flex-direction:column;gap:1.6vh}
@@ -199,13 +214,18 @@ math-field::part(virtual-keyboard-toggle),math-field::part(menu-toggle){display:
 @keyframes modalFade{from{opacity:0}to{opacity:1}}
 @keyframes modalPop{from{opacity:0;transform:translateY(12px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
 
-/* ── 手書き計算メモ（交点：右ヒント欄内に配置・グラフ高さを侵食しない） ── */
-.memo-area{display:flex;flex-direction:column;gap:.6vh;background:var(--card);border:2px solid var(--line);border-radius:14px;padding:1vh 1.2vw;min-height:0;overflow:hidden;}
-.memo-head{display:flex;align-items:center;justify-content:space-between}
-.memo-label{font-size:1.6vh;font-weight:700;color:var(--fire)}
-.memo-clear{background:var(--bg2);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:.4vh 1.2vw;font-size:1.4vh;font-weight:700;font-family:var(--font-family);cursor:pointer;min-height:32px;}
-.memo-clear:hover{border-color:var(--fire);color:var(--fire)}
-.memo-canvas{width:100%;flex:1 1 0;min-height:0;display:block;touch-action:none;border-radius:10px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--line) 27px,var(--line) 28px),var(--bg);cursor:crosshair;}
-.hint-area .memo-area{margin-top:auto;max-height:24vh}
-.hint-area .memo-canvas{min-height:14vh}
+/* ── クイズ画面全体の手書きレイヤー ── */
+.write-canvas{position:fixed;inset:0;width:100vw;height:100vh;z-index:10;display:none;pointer-events:none;touch-action:none}
+.write-canvas.is-visible{display:block}
+/* Canvasの上からも確実に操作できるもの */
+button,math-field,input,textarea,select,a,[role="button"]{position:relative;z-index:20}
 .emoji-icon{font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif!important;font-weight:400!important;font-style:normal}
+
+@media (max-width:820px){
+  .center-panel{flex-direction:column;align-items:stretch}
+  .question-workspace{flex-direction:column;gap:1.8vh}
+  .graph-section,.answer-panel{width:100%}
+  .quiz-footer{flex-wrap:wrap;justify-content:center;flex-basis:126px;min-height:126px}
+  .answer-actions button{min-width:38vw}
+  .write-status{flex-basis:100%;order:-1}
+}
