@@ -152,11 +152,13 @@ math-field::part(virtual-keyboard-toggle),math-field::part(menu-toggle){display:
 .draw-controls,.answer-actions{display:flex;align-items:center;gap:1vw}
 .answer-actions{width:100%;justify-content:center}
 .answer-actions button{min-width:min(28vw,280px);font-size:2.4vh;padding:1.6vh 0}
-.write-toggle,.write-clear{min-height:48px;border-radius:14px;padding:0 1.2vw;font-size:1.8vh;font-weight:700}
+.write-toggle,.write-eraser,.write-clear{min-height:48px;border-radius:14px;padding:0 1.2vw;font-size:1.8vh;font-weight:700}
 .write-toggle{background:#fff;color:var(--fire);border:2px solid var(--fire)}
 .write-toggle.is-active{background:linear-gradient(135deg,var(--fire),var(--ember));color:#fff;box-shadow:var(--shadow)}
+.write-eraser{background:#fff;color:#0f766e;border:2px solid #5eead4}
+.write-eraser.is-active{background:linear-gradient(135deg,#0f766e,#0d9488);color:#fff;border-color:transparent;box-shadow:0 8px 20px rgba(13,148,136,.25)}
 .write-clear{background:var(--bg2);color:var(--muted);border:2px solid var(--line)}
-.write-clear:disabled{opacity:.45;cursor:not-allowed}
+.write-clear:disabled,.write-eraser:disabled{opacity:.45;cursor:not-allowed}
 .write-status{flex:1;text-align:center;background:#312e81;color:#fff;border-radius:999px;padding:.6vh 1.2vw;font-size:1.5vh;font-weight:700;box-shadow:0 4px 14px rgba(49,46,129,.25)}
 
 /* ── result ── */

@@ -419,21 +419,39 @@ function showConfirm({title,message,okText='OK',cancelText='キャンセル',dan
 function initWriting(){
   const canvas=$('write-canvas'); if(!canvas) return;
   const ctx=canvas.getContext('2d');
-  let drawing=false, last=null, pointerId=null, writing=false, hasInk=false;
+  let drawing=false, last=null, pointerId=null, writing=false, hasInk=false, tool='pen';
+  function applyTool(){
+    ctx.globalCompositeOperation=tool==='eraser'?'destination-out':'source-over';
+    ctx.lineWidth=tool==='eraser'?24:3;
+    ctx.strokeStyle='#4338ca';
+  }
   function resize(){
     const old=document.createElement('canvas');
     if(canvas.width&&canvas.height){ old.width=canvas.width; old.height=canvas.height; old.getContext('2d').drawImage(canvas,0,0); }
     const dpr=window.devicePixelRatio||1;
     canvas.width=Math.round(window.innerWidth*dpr); canvas.height=Math.round(window.innerHeight*dpr);
     ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation='source-over';
     if(old.width&&old.height) ctx.drawImage(old,0,0,old.width,old.height,0,0,canvas.width,canvas.height);
     ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#4338ca';
+    ctx.lineCap='round'; ctx.lineJoin='round'; applyTool();
   }
   function pos(e){ return {x:e.clientX,y:e.clientY}; }
   function isControl(target){ return !!(target&&target.closest&&target.closest('button,math-field,input,textarea,select,a,[role="button"],label')); }
   function stop(){ drawing=false; last=null; pointerId=null; }
-  function clear(){ ctx.clearRect(0,0,canvas.width,canvas.height); hasInk=false; $('write-clear').disabled=true; }
+  function clear(){
+    ctx.clearRect(0,0,canvas.width,canvas.height); hasInk=false;
+    $('write-clear').disabled=true; $('write-eraser').disabled=true;
+    if(tool==='eraser') setTool('pen');
+  }
+  function setTool(next){
+    tool=next; applyTool();
+    const erasing=tool==='eraser';
+    $('write-eraser').classList.toggle('is-active',erasing);
+    $('write-eraser').setAttribute('aria-pressed',String(erasing));
+    $('write-eraser').textContent=erasing?'🧽 鉛筆に戻る':'🧽 消しゴム';
+    if(writing) $('write-status').textContent=erasing?'🧽 消しゴム中：なぞった部分だけ消せます':'✍️ 書き込み中：入力欄・ボタンはそのまま押せます';
+  }
   function setMode(on){
     writing=!!on;
     canvas.classList.toggle('is-visible',writing);
@@ -441,23 +459,25 @@ function initWriting(){
     $('write-toggle').setAttribute('aria-pressed',String(writing));
     $('write-toggle').textContent=writing?'✍️ 書き終わる':'✏️ 書く';
     $('write-status').classList.toggle('hidden',!writing);
+    if(writing) setTool(tool);
     if(!writing) stop();
   }
   document.addEventListener('pointerdown',e=>{
     if(!writing||e.button!==0||isControl(e.target)) return;
     drawing=true; pointerId=e.pointerId; last=pos(e);
-    ctx.beginPath(); ctx.arc(last.x,last.y,1.5,0,Math.PI*2); ctx.fillStyle='#4338ca'; ctx.fill();
-    hasInk=true; $('write-clear').disabled=false; e.preventDefault();
+    ctx.beginPath(); ctx.arc(last.x,last.y,tool==='eraser'?12:1.5,0,Math.PI*2); ctx.fill();
+    hasInk=true; $('write-clear').disabled=false; $('write-eraser').disabled=false; e.preventDefault();
   },true);
   document.addEventListener('pointermove',e=>{
     if(!drawing||e.pointerId!==pointerId) return;
     if(isControl(e.target)){ stop(); return; }
     const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p;
-    hasInk=true; $('write-clear').disabled=false; e.preventDefault();
+    hasInk=true; $('write-clear').disabled=false; $('write-eraser').disabled=false; e.preventDefault();
   },true);
   document.addEventListener('pointerup',e=>{ if(e.pointerId===pointerId) stop(); },true);
   document.addEventListener('pointercancel',e=>{ if(e.pointerId===pointerId) stop(); },true);
   $('write-toggle').addEventListener('click',()=>setMode(!writing));
+  $('write-eraser').addEventListener('click',()=>{ if(hasInk){ setMode(true); setTool(tool==='eraser'?'pen':'eraser'); } });
   $('write-clear').addEventListener('click',clear);
   window.addEventListener('resize',resize);
   window.clearWriting=clear;
