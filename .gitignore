@@ -14,3 +14,8 @@ credentials*
 # clasp (GAS)
 .clasp.json
 .clasprc.json
+
+# 公開しない記録（2026-10-18）
+_削除OK/
+ANSWER_QA.md
+LEGAL_REVIEW.md

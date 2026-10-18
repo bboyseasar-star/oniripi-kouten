@@ -148,8 +148,8 @@ function buildQuestion(level, a1, b1, a2, b2, R) {
     display: '', // 式は出さない（グラフに差し替え）
     extra: '',
     inputs: INPUTS,
-    // 答えは有理数（分子・分母ペア）
-    answersRat: [X, Y],
+    // 正解は文字列（既約分数・分母は正）。採点は GRADER-CORE が有理数で厳密に比べる
+    answers: [ratLatex(X), ratLatex(Y)],
     answerLatex: `\\left(${ratLatex(X)},\\ ${ratLatex(Y)}\\right)`,
     // ヒントでグラフに打つ点（step1→直線①, step3→直線②）
     hintGraph: {

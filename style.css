@@ -231,3 +231,46 @@ button,math-field,input,textarea,select,a,[role="button"]{position:relative;z-in
   .answer-actions button{min-width:38vw}
   .write-status{flex-basis:100%;order:-1}
 }
+
+/* △（分母のマイナス・0点）と、採点の一言（2026-10-18 採点修正） */
+.feedback-box.tri{background:#fef3c7;border:2px solid #b45309;color:#78350f}
+.feedback-box .fb-msg{font-weight:700}
+.review-item.tri{border-left-color:#b45309}
+
+/* ── 1画面に収める3列の配置（2026-10-18）：グラフ｜答え・結果｜ヒント ──
+   800×600・1024×600・1366×768 でも画面全体も問題の枠もスクロールさせない。
+   .main-left を display:contents にして、中の「問題」「答え」「結果」を直接グリッドに並べる。 */
+@media (min-width:700px){
+  .screen{padding:1.4vh 1.6vw}
+  .quiz-header{padding:.8vh 1.6vw}
+  .quiz-main{margin:1.2vh 0 .6vh;overflow:hidden}
+  .center-panel{display:grid;width:min(1240px,97vw);height:100%;
+    grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) minmax(0,.95fr);grid-template-rows:auto minmax(0,1fr);
+    gap:1.4vh 1.4vw;align-items:start}
+  .main-left{display:contents}
+  .question-card{grid-column:1;grid-row:1/3;align-self:stretch;display:flex;flex-direction:column;justify-content:center;padding:1.6vh 1.2vw;min-height:0}
+  .question-label{font-size:1.9vh;margin-bottom:.6vh}
+  .main-left .graph-canvas,#screen-quiz.has-feedback .main-left .graph-canvas,.has-feedback .graph-canvas{width:min(30vw,56vh);height:min(30vw,56vh)}
+  .answer-panel{grid-column:2;grid-row:1;background:var(--card);border:2px solid var(--line);border-radius:18px;padding:1.6vh 1vw;box-shadow:var(--shadow)}
+  #feedback-box{grid-column:2;grid-row:2;align-self:start;max-height:100%;overflow-y:auto;font-size:1.9vh;line-height:1.5;padding:1.2vh 1.2vw}
+  #feedback-box.hidden{display:none!important}
+  .hint-area{grid-column:3;grid-row:1/3;align-self:stretch;max-height:none;min-height:0}
+  .hint-text{max-height:none}
+  .answer-row{gap:.4vw}
+  .mf-inline{min-width:0;width:min(10vw,120px)}
+  .mf-inline math-field{min-width:0}
+  .answer-actions button{min-width:0;width:100%;max-width:280px}
+  .helper-keys{gap:.8vw}
+  .hkey{padding:.7vh 1.2vw}
+  .input-note{text-align:center}
+  .quiz-footer{flex:0 0 60px;min-height:60px;flex-wrap:nowrap;padding-bottom:.6vh}
+  .quiz-footer button{min-width:0}
+  .write-toggle,.write-eraser,.write-clear{min-height:44px;padding:0 1.6vw;white-space:nowrap}
+  .write-status{flex:0 1 auto;order:0}
+}
+
+/* スマートフォンの縦向きなど狭い画面では、問題の枠の中を縦にスクロールする（重ならないように上から並べる） */
+@media (max-width:699px){
+  .center-panel{justify-content:flex-start;align-items:stretch;height:auto;min-height:0}
+  .quiz-main{align-items:flex-start}
+}

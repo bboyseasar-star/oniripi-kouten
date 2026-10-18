@@ -14,7 +14,7 @@
     };
   </script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261018c">
 </head>
 <body>
 
@@ -80,7 +80,7 @@
           <div class="answer-panel">
             <div class="answer-zone">
               <div class="answer-row" id="answer-row"><!-- JSが入力欄を生成 --></div>
-              <p class="input-note">※半角で入力してね（分数は <span class="kbd">\(\frac{a}{b}\)</span> ボタン）</p>
+              <p class="input-note">※分数は約分して書こう。割り切れない数は分数で（<span class="kbd">\(\frac{a}{b}\)</span> ボタン）</p>
               <div class="helper-keys">
                 <button class="hkey" data-cmd="frac">\(\frac{a}{b}\) 分数</button>
                 <button class="hkey" data-cmd="minus">−</button>
@@ -149,7 +149,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="https://unpkg.com/mathlive@0.98.4/dist/mathlive.min.js"></script>
-  <script src="questions.js"></script>
-  <script src="main.js"></script>
+  <script src="grader-core.js?v=20261018c"></script>
+  <script src="questions.js?v=20261018c"></script>
+  <script src="main.js?v=20261018c"></script>
 </body>
 </html>

@@ -1,5 +1,68 @@
 // main.js ── 交点マスター（複数入力フィールド対応・汎用版）
 'use strict';
+
+/* ===== 採点（DOM に触らない。回帰テストからも呼ぶ） =====
+   採点は GRADER-CORE（grader-core.js）に任せる。正解は文字列 q.answers = [x, y]（'-\frac{3}{4}' など）。
+   戻り値は GraderCore の結果 {status, reason, parts, …} に、画面に出すアプリ側の一言 note を足したもの。 */
+function koutenHasDecimal(raw){
+  var n = GraderCore.normalize(raw);
+  return !!(n && n.s && n.s.indexOf('.') >= 0);
+}
+// 正解が有限小数で書けるか（分母が 2 と 5 だけ）
+function koutenTerminates(ans){
+  var m = String(ans).match(/\\d?frac\{(\d+)\}\{(\d+)\}/) || String(ans).match(/(\d+)\/(\d+)/);
+  var d = m ? parseInt(m[2], 10) : 1;
+  while (d % 2 === 0) d /= 2;
+  while (d % 5 === 0) d /= 5;
+  return d === 1;
+}
+function gradeAnswer(q, raws){
+  raws = raws || [];
+  // 空欄・空の枠が1つでもあれば採点しない（書き直してもらう）
+  for (var i = 0; i < 2; i++) if (GraderCore.isBlank(raws[i])) return { status: 'empty', reason: 'empty', note: '' };
+  for (i = 0; i < 2; i++) if (GraderCore.hasEmptySlot(raws[i])) return { status: 'unreadable', reason: 'emptySlot', note: '' };
+  // 「x=\frac32」のように文字を書き添えても読む。x の欄に「y=…」は×
+  var rx = GraderCore.gradeNumber(raws[0], q.answers[0], { lhs: 'x' });
+  var ry = GraderCore.gradeNumber(raws[1], q.answers[1], { lhs: 'y' });
+  var r = GraderCore.worst([rx, ry]);
+  r.parts = [rx, ry];
+  r.note = koutenNote(r.parts, raws, q.answers);
+  return r;
+}
+// GraderCore の一言が無いときに足す、アプリ側の一言（未約分・符号2つは決定どおり何も出さない）
+function koutenNote(parts, raws, answers){
+  var i;
+  for (i = 0; i < parts.length; i++) if (parts[i].reason === 'expression') return '計算を最後までして、1つの数で答えよう';
+  for (i = 0; i < parts.length; i++) {
+    if (parts[i].status === 'wrong' && parts[i].reason === 'value' && koutenHasDecimal(raws[i]) && !koutenTerminates(answers[i])) return '割り切れない数は分数で答えよう';
+  }
+  return '';
+}
+function koutenNeedsRewrite(r){ return r.reason === 'empty' || r.reason === 'emptySlot'; }
+
+/* ===== 仮想キーボード（タッチ端末） =====
+   仮想キーボードの ⏎ は keydown を出さず、欄に beforeinput（inputType 'insertLineBreak'）を出す（MathLive 0.98.4 で確認）。
+   キーボードの Enter は keydown で受けて既定の動作を止めるので beforeinput は出ないが、念のため直前に Enter の keydown が
+   あったときは何もしない（二重に採点しない）。 */
+function onVirtualEnter(field, fn){
+  if(!field) return;
+  var lastKeyEnter = 0;
+  field.addEventListener('keydown', function(e){ if(e.key === 'Enter') lastKeyEnter = Date.now(); }, { capture: true });
+  field.addEventListener('beforeinput', function(e){
+    if(e.inputType !== 'insertLineBreak') return;
+    e.preventDefault();
+    if(Date.now() - lastKeyEnter < 500) return;
+    fn(e);
+  });
+}
+// 締め切ったら仮想キーボードを閉じる（「次へ」を隠さないように）。
+// 出ていたときだけ欄からフォーカスを外す（キーボード付きの端末では、そのまま Enter で次へ進めるように）
+function closeVirtualKeyboard(fields){
+  var vk = window.mathVirtualKeyboard, wasVisible = false;
+  try{ wasVisible = !!(vk && vk.visible); if(vk && vk.hide) vk.hide(); }catch(e){ /* 何もしない */ }
+  if(wasVisible) (fields || []).forEach(function(f){ try{ if(f && f.blur) f.blur(); }catch(e){ /* 何もしない */ } });
+}
+
 (function(){
 
 /* ===== localStorage ===== */
@@ -14,7 +77,10 @@ function loadData(){ try{ return JSON.parse(store.get(STORE_KEY))||{high:0,histo
 function saveData(d){ store.set(STORE_KEY, JSON.stringify(d)); }
 
 /* ===== 状態 ===== */
-let level=1, session=[], idx=0, score=0, hintStep=0, hintGraphLevel=0, locked=false, results=[];
+let level=1, session=[], idx=0, score=0, hintStep=0, hintGraphLevel=0, locked=false, busy=false, results=[];
+// 「決定」の連打で、同じ位置に出る「次へ」まで押してしまわないよう、採点直後は少しだけ押せなくする
+const NEXT_GUARD_MS=400;
+let nextGuardUntil=0;
 let fields=[];
 let lastFocused=null;
 const QN = 5;
@@ -143,42 +209,6 @@ function drawGraph(q, hintGraphLevel){
   }
 }
 
-/* ===== LaTeX → 有理数 {n,d}（厳密判定用） ===== */
-function gcdI(a,b){ a=Math.abs(a);b=Math.abs(b); while(b){[a,b]=[b,a%b];} return a||1; }
-function reduceRat(n,d){
-  if(d===0) return null;
-  if(d<0){ n=-n; d=-d; }
-  const g=gcdI(n,d); return { n:n/g, d:d/g };
-}
-// 生徒入力(LaTeX/プレーン)を有理数 {n,d} に。分数・整数・先頭マイナス・\frac{-a}{b}・-\frac{a}{b} を同一視。
-function latexToRat(latex){
-  if(latex==null) return null;
-  let s = String(latex).replace(/\s+/g,'');
-  s = s.replace(/\\left|\\right|\\,|\\!|\\;|\\cdot|\\mleft|\\mright|\\operatorname/g,'');
-  s = s.replace(/[−ー–—]/g,'-').replace(/[＋]/g,'+').replace(/[／]/g,'/');
-  s = s.replace(/\\dfrac/g,'\\frac').replace(/\\tfrac/g,'\\frac');
-  // \frac{a}{b}（中括弧省略の1文字パターンも補正）
-  s = s.replace(/\\frac([^{])([^{])/g,'\\frac{$1}{$2}');
-  s = s.replace(/\\frac{([^{])}([^{])/g,'\\frac{$1}{$2}');
-  s = s.replace(/\\frac([^{]){([^{]+)}/g,'\\frac{$1}{$2}');
-  if(s==='') return null;
-  // 先頭マイナス + \frac{p}{q}
-  let m = s.match(/^(-?)\\frac\{(-?\d+)\}\{(-?\d+)\}$/);
-  if(m){
-    let n=parseInt(m[2],10), d=parseInt(m[3],10);
-    if(m[1]==='-') n=-n;
-    return reduceRat(n,d);
-  }
-  // a/b プレーン分数
-  m = s.match(/^(-?\d+)\/(-?\d+)$/);
-  if(m) return reduceRat(parseInt(m[1],10),parseInt(m[2],10));
-  // 整数
-  if(/^-?\d+$/.test(s)) return reduceRat(parseInt(s,10),1);
-  return null;
-}
-// 2つの有理数が値として等しいか（既約化して分子・分母一致）
-function ratEq(a,b){ return a&&b&&a.n===b.n&&a.d===b.d; }
-
 /* ===== レベル選択 ===== */
 document.querySelectorAll('.level-btn').forEach(btn=>{
   btn.onclick=()=>{ document.querySelectorAll('.level-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); level=+btn.dataset.level; };
@@ -202,12 +232,17 @@ function buildFields(q){
   q.inputs.forEach((inp,i)=>{
     if(inp.before){ const sp=document.createElement('span'); sp.className='ans-fix'; sp.innerHTML=inp.before; row.appendChild(sp); }
     const wrap=document.createElement('span'); wrap.className='mf-inline';
-    const mf=document.createElement('math-field'); mf.setAttribute('virtual-keyboard-mode','off'); mf.dataset.i=i;
+    const mf=document.createElement('math-field'); mf.dataset.i=i;
     wrap.appendChild(mf); row.appendChild(wrap);
     if(inp.after){ const sp=document.createElement('span'); sp.className='ans-fix'; sp.innerHTML=inp.after; row.appendChild(sp); }
     mf.addEventListener('focus',()=>{ lastFocused=mf; });
-    mf.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); if(!locked) submit(); } });
-    forceHalfWidth(mf);
+    // 欄は問題ごとに作り直すので、作った直後に1回だけ設定する（値の書き換えはしない）
+    GraderCore.setupMathField(mf,{ onEnter:onFieldEnter });
+    onVirtualEnter(mf, onFieldEnter);   // 仮想キーボードの ⏎
+    // タッチ端末で入力できるよう、仮想キーボードは auto にしておく（MathLive 0.98 の欄は OS のキーボードが出ない）。
+    // 部品の版が古くても auto になるよう、ここでも指定する（キーボード付きの端末では出ない）
+    mf.setAttribute('math-virtual-keyboard-policy','auto');
+    try{ mf.mathVirtualKeyboardPolicy='auto'; }catch(e){}
     fields.push(mf);
   });
   lastFocused=fields[0]||null;
@@ -217,30 +252,19 @@ function getVal(mf){ return mf.getValue?mf.getValue('latex'):mf.value; }
 
 /* ===== ヘルパーキー ===== */
 document.querySelector('.helper-keys').addEventListener('click',e=>{
-  const b=e.target.closest('.hkey'); if(!b||locked) return;
+  const b=e.target.closest('.hkey'); if(!b||locked||busy) return;
   const f=lastFocused||fields[0]; if(!f) return;
   if(b.dataset.cmd==='frac'){ try{ f.executeCommand(['insert','\\frac{#0}{#?}']); }catch(_){ try{ f.insert('\\frac{#0}{#?}'); }catch(__){} } }
   else if(b.dataset.cmd==='minus'){ try{ f.insert('-'); }catch(_){} }
   else if(b.dataset.cmd==='clear'){ f.value=''; }
   f.focus();
 });
-function forceHalfWidth(f){
-  if(!f) return;
-  f.setAttribute('inputmode','latin');
-  f.addEventListener('compositionend',ev=>{
-    const data=ev.data;
-    if(data){
-      const c=data.replace(/[０-９]/g,s=>String.fromCharCode(s.charCodeAt(0)-0xFEE0))
-        .replace(/[ａ-ｚ]/g,s=>String.fromCharCode(s.charCodeAt(0)-0xFEE0))
-        .replace(/[Ａ-Ｚ]/g,s=>String.fromCharCode(s.charCodeAt(0)-0xFEE0))
-        .replace(/[＋]/g,'+').replace(/[－ー−]/g,'-').replace(/[／]/g,'/');
-      f.value=''; f.insert(c);
-    }
-  });
-  f.addEventListener('focus',()=>{
-    f.setAttribute('inputmode','latin');
-    const sh=f.shadowRoot; if(sh){ const ta=sh.querySelector('textarea'); if(ta){ ta.setAttribute('inputmode','latin'); ta.setAttribute('autocorrect','off'); ta.setAttribute('lang','en'); } }
-  });
+// Enter：未採点なら採点、採点済みなら次へ。押しっぱなし・確認の画面中は何もしない
+function onFieldEnter(e){
+  if(e&&e.repeat) return;
+  if(busy) return;
+  if(locked){ if(!$('next-btn').classList.contains('hidden')) $('next-btn').click(); }
+  else submit();
 }
 
 /* ===== ゲーム進行 ===== */
@@ -251,7 +275,7 @@ function startGame(reuse){
   show('quiz'); loadQuestion();
 }
 function loadQuestion(){
-  locked=false; hintStep=0; hintGraphLevel=0;
+  locked=false; hintStep=0; hintGraphLevel=0; clearFlash();
   const q=session[idx];
   $('q-counter').textContent=`Q ${idx+1} / ${session.length}`;
   $('progress-fill').style.width=(idx/session.length*100)+'%';
@@ -272,43 +296,84 @@ function loadQuestion(){
 }
 
 function submit(){
-  if(locked) return;
+  if(locked||busy) return;
   const q=session[idx];
   const userVals=fields.map(getVal);
-  if(userVals.some(v=>!v||!v.trim())){ flashNote('全部のマスを入力してね！'); return; }
-  const ok = q.answersRat.every((a,i)=>{
-    const v=latexToRat(userVals[i]);
-    return ratEq(v,a);
-  });
-  finishQuestion(ok, userVals);
+  const r=gradeAnswer(q, userVals);
+  // 空欄・空の枠は採点せず、書き直してもらう（この問題は締め切らない）
+  if(koutenNeedsRewrite(r)){ flashNote(r.reason==='emptySlot'||userVals.some(v=>GraderCore.hasEmptySlot(v))?'空いている枠（□）があるよ。うめてから決定してね':'全部のマスを入力してね！'); return; }
+  finishQuestion(r, userVals);
 }
 let noteTimer;
 function flashNote(msg){
   const note=document.querySelector('.input-note');
-  note.dataset.orig=note.dataset.orig||note.textContent;
+  // 元の案内は innerHTML ごと戻す（数式の表示が文字に化けないように）
+  if(note.dataset.orig===undefined) note.dataset.orig=note.innerHTML;
   note.textContent=msg; note.style.color='var(--ng)';
-  clearTimeout(noteTimer); noteTimer=setTimeout(()=>{ note.textContent=note.dataset.orig; note.style.color=''; },1600);
+  clearTimeout(noteTimer); noteTimer=setTimeout(clearFlash,2200);
+}
+// 一時的な注意を消して、元の案内に戻す（採点したとき・次の問題へ進んだときも）
+function clearFlash(){
+  clearTimeout(noteTimer);
+  const note=document.querySelector('.input-note');
+  if(note&&note.dataset.orig!==undefined){ note.innerHTML=note.dataset.orig; note.style.color=''; delete note.dataset.orig; }
 }
 function userEqLatex(q,userVals){
   // 区切り記号(\(...\))を含む inputs テンプレは使わず、答えと同じ \left(x,\ y\right) 形式で組む
-  const v=userVals.map(s=>cleanLatex((s&&String(s).trim())?s:'?'));
+  const v=userVals.map(s=>hasInput(s)?texOf(s):'?');
   return `\\left(${v[0]},\\ ${v[1]}\\right)`;
 }
-function cleanLatex(s){ return String(s).replace(/\\dfrac/g,'\\frac'); }
+function hasInput(s){ return !!s && !GraderCore.isBlank(s); }
+// 生徒の入力（MathLive の LaTeX）を MathJax で表示できる形にする。生の LaTeX を文字のまま見せない
+function texOf(s){
+  return escapeHtml(String(s)
+    // 全角の数字・記号は半角にそろえて見せる（「１．５」が「1、5」のように崩れないように）
+    .replace(/[！-～]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/　/g,' ')
+    .replace(/[−ーｰ]/g,'-')
+    .replace(/\\dfrac/g,'\\frac').replace(/\\mleft/g,'\\left').replace(/\\mright/g,'\\right')
+    .replace(/\\placeholder(?![A-Za-z])\s*(?:\[[^\]]*\])?\s*(?:\{[^{}]*\})?/g,'\\square')
+    // キーボードで打った <= >= や \le \ge・≤ ≥ は、正しい答えと同じ ≦ ≧ で見せる
+    .replace(/<=|=</g,'\\leqq ').replace(/>=|=>/g,'\\geqq ')
+    .replace(/\\leq?(?![A-Za-z])/g,'\\leqq').replace(/\\geq?(?![A-Za-z])/g,'\\geqq')
+    .replace(/\u2264/g,'\\leqq ').replace(/\u2265/g,'\\geqq ')
+    // % は MathJax ではコメントの記号なので、\% にして消えないようにする
+    .replace(/(^|[^\\])%/g,'$1\\%')
+    // スラッシュの分数（MathLive で「-4/2」と打ったまま）も縦の分数で見せる
+    .replace(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/g,'\\frac{$1}{$2}')
+    // MathJax が知らない \degree は ^{\circ} にする
+    .replace(/\{\}\^\{?\\degree\}?/g,'^{\\circ}').replace(/\^\{?\\degree\}?/g,'^{\\circ}').replace(/\\degree(?![A-Za-z])/g,'^{\\circ}'));
+}
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// 答えが分数の問題では、約束ごとをヒント・解説に出しておく（×の画面では未約分の理由を言わない決定のため）
+function ruleNote(q){
+  return (q.answers||[]).some(a=>/frac|\//.test(String(a))) ? '※分数は約分して書こう。割り切れない数は分数で答えよう。' : '';
+}
 
-function finishQuestion(ok,userVals,gaveUp){
+// r: gradeAnswer の結果（ギブアップは {status:'wrong', reason:'giveUp'}）
+function finishQuestion(r,userVals,gaveUp){
   locked=true;
+  closeVirtualKeyboard(fields);
+  nextGuardUntil=Date.now()+NEXT_GUARD_MS;
+  clearFlash();
   const q=session[idx];
+  const ok=r.status==='correct';
+  const tri=r.status==='negDenominator';   // △（0点）。×と同じ流れで締め切り、復習リストへ
   if(ok) score+=20;
   $('score-display').textContent=score+'点';
-  results.push({ q, userVals: gaveUp?null:userVals, ok });
+  // ギブアップでも、書いていた答えは見せる
+  if(userVals&&!userVals.some(hasInput)) userVals=null;
+  results.push({ q, userVals, ok, mark: GraderCore.mark(r) });
   const fb=$('feedback-box');
-  fb.className='feedback-box '+(ok?'ok':'ng');
+  fb.className='feedback-box '+(ok?'ok':tri?'tri':'ng');
+  const msg=gaveUp?'':(r.note||GraderCore.message(r));
   if(ok){ fb.innerHTML='<div class="fb-row" style="font-weight:700;font-size:2.2vh">⭕ 正解！</div>'; }
   else{
-    fb.innerHTML=`<div class="fb-row" style="font-weight:700;font-size:2.2vh">${gaveUp?'🏳️ ギブアップ':'❌ ざんねん…'}</div>
+    const head=gaveUp?'🏳️ ギブアップ':tri?'△ おしい！（0点）':'❌ 不正解';
+    const rule=ruleNote(q);
+    fb.innerHTML=`<div class="fb-row" style="font-weight:700;font-size:2.2vh">${head}</div>
+      ${msg?`<div class="fb-row fb-msg">${escapeHtml(msg)}</div>`:''}
       <div class="fb-row"><span class="fb-label">あなたの解答：</span> ${userVals?`\\(${userEqLatex(q,userVals)}\\)`:'（なし）'}</div>
-      <div class="fb-row"><span class="fb-label">正しい答え：</span> \\(${q.answerLatex}\\)</div>`;
+      <div class="fb-row"><span class="fb-label">正しい答え：</span> \\(${q.answerLatex}\\)${rule?`<br><small>${rule}</small>`:''}</div>`;
   }
   fb.classList.remove('hidden');
   screens.quiz.classList.add('has-feedback');
@@ -342,14 +407,17 @@ function appendHint(html,stepNo,isAnswer){
   box.scrollTop=box.scrollHeight;
 }
 $('hint-btn').onclick=async()=>{
-  if(locked) return;
+  if(locked||busy) return;
   const q=session[idx];
   if(hintStep>=q.hints.length-1){
-    if(!(await showConfirm({title:'答えを見る？',message:'次のヒントは答えだよ！見ると不正解（ギブアップ）になります。',okText:'見る',danger:true}))) return;
-    if(locked) return;
-    appendHint(q.hints[q.hints.length-1], hintStep+1, true);
-    const cur=fields.map(getVal);
-    finishQuestion(false, cur.some(v=>v&&String(v).trim())?cur:null, true); return;
+    busy=true;
+    let yes=false;
+    try{ yes=await showConfirm({title:'答えを見る？',message:'次のヒントは答えだよ！見ると不正解（ギブアップ）になります。',okText:'見る',danger:true}); }
+    finally{ busy=false; }
+    if(!yes||locked) return;
+    const rule=ruleNote(q);
+    appendHint(q.hints[q.hints.length-1]+(rule?`<br><small>${rule}</small>`:''), hintStep+1, true);
+    finishQuestion({status:'wrong',reason:'giveUp'}, fields.map(getVal), true); return;
   }
   // これから見せるステップ（1始まり）：ステップ1で直線①の点、ステップ3で直線②の点を打つ
   const stepNo = hintStep+1;
@@ -361,7 +429,10 @@ $('hint-btn').onclick=async()=>{
   if(hintStep>=q.hints.length-1) $('hint-btn').textContent='⚠️ 答えを見る';
 };
 
-$('next-btn').onclick=()=>{ idx++; if(idx>=session.length) showResult(); else loadQuestion(); };
+$('next-btn').onclick=e=>{
+  // 指・マウスで押したときだけ止める（Enter から呼ぶ click() は止めない）
+  if(e&&e.isTrusted&&Date.now()<nextGuardUntil) return;
+  idx++; if(idx>=session.length) showResult(); else loadQuestion(); };
 
 /* ===== 結果 ===== */
 function showResult(){
@@ -378,16 +449,16 @@ function showResult(){
   if(d.history.length>50) d.history=d.history.slice(-50); saveData(d);
   const wrong=results.filter(r=>!r.ok);
   $('review-wrong-btn').classList.toggle('hidden',wrong.length===0);
-  $('review-list').innerHTML=results.map((r,i)=>`<div class="review-item ${r.ok?'ok':'ng'}">
-      <div class="ri-q">${r.ok?'⭕':'❌'} 第${i+1}問　${r.q.label}</div>
-      <div class="ri-ans">あなた: \\(${r.userVals?userEqLatex(r.q,r.userVals):'なし'}\\) ／ 正解: \\(${r.q.answerLatex}\\)</div></div>`).join('');
+  $('review-list').innerHTML=results.map((r,i)=>`<div class="review-item ${r.ok?'ok':r.mark==='△'?'tri':'ng'}">
+      <div class="ri-q">${r.ok?'⭕':r.mark==='△'?'△':'❌'} 第${i+1}問　${r.q.label}</div>
+      <div class="ri-ans">あなた: ${r.userVals?`\\(${userEqLatex(r.q,r.userVals)}\\)`:'なし'} ／ 正解: \\(${r.q.answerLatex}\\)</div></div>`).join('');
   typeset($('review-list'));
 }
 function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
 function burst(){ const end=Date.now()+800; (function f(){ confetti({particleCount:5,angle:60,spread:55,origin:{x:0}}); confetti({particleCount:5,angle:120,spread:55,origin:{x:1}}); if(Date.now()<end) requestAnimationFrame(f); })(); }
 
 /* ===== ボタン ===== */
-$('quit-btn').onclick=()=>{ showConfirm({title:'ホームに戻る？',message:'いまのチャレンジは記録されません。',okText:'戻る'}).then(ok=>{ if(ok){ renderHome(); show('start'); } }); };
+$('quit-btn').onclick=()=>{ if(busy) return; busy=true; showConfirm({title:'ホームに戻る？',message:'いまのチャレンジは記録されません。',okText:'戻る'}).then(ok=>{ busy=false; if(ok){ renderHome(); show('start'); } }); };
 $('submit-btn').onclick=submit;
 $('start-btn').onclick=()=>startGame(false);
 $('retry-btn').onclick=()=>startGame(false);
